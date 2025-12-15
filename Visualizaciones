@@ -1,0 +1,754 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Tue Dec  2 12:37:12 2025
+
+@author: pauc1
+"""
+
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# ---- Load CSV -----
+df = pd.read_csv('D:/JCA/Doctorado - US/Sevilla segregación/Paper Miguel/Metodologia de analisis cualitativo/Python/comments_dataset.csv')
+
+# If date exists, convert to datetime
+if "date" in df.columns:
+    df["date"] = pd.to_datetime(df["date"], errors="coerce")
+
+# -------------------------------
+# Keep only numeric feature columns
+# -------------------------------
+numeric_cols = [
+    "sentiment_pos", "emotion_joy", "emotion_surprise", "irony_ironic",
+    "sentiment_neu",  "sentiment_neg", "emotion_anger",
+     "emotion_sadness", "emotion_disgust", "emotion_fear", 
+     "hate_hateful", "hate_targeted", "hate_aggressive"]
+
+# Filter dataframe (ignoring missing columns)
+numeric_cols = [c for c in numeric_cols if c in df.columns]
+df_num = df[numeric_cols]
+
+# ========================================
+# 1. CORRELATION HEATMAP (Highly recommended)
+# ========================================
+plt.figure(figsize=(12, 10))
+sns.heatmap(df_num.corr(), annot=False, cmap="coolwarm", center=0)
+plt.title("Correlation Heatmap of Sentiment / Emotion / Hate / Irony Variables")
+plt.tight_layout()
+plt.show()
+
+# ========================================
+# 2. SCATTERPLOT MATRIX (Pairplot)
+# ========================================
+sns.pairplot(df_num, corner=True, diag_kind="kde")
+plt.suptitle("Pairwise Variable Relationships", y=1.02)
+plt.show()
+
+# ========================================
+# 3. VIDEO-LEVEL AGGREGATION (mean values)
+# ========================================
+if "video_url" in df.columns:
+    df_video = df.groupby("video_url")[numeric_cols].mean().reset_index()
+    
+    # Example: Compare joy vs anger per video
+    plt.figure(figsize=(10, 6))
+    sns.scatterplot(
+        data=df_video, 
+        x="emotion_joy", 
+        y="emotion_anger",
+        size=df_video["sentiment_pos"] + 0.1,  # bubble size (optional)
+        sizes=(50, 500),
+        hue="sentiment_pos",
+        palette="viridis"
+    )
+    plt.title("Joy vs Anger per Video (bubble size = positivity)")
+    plt.xlabel("Emotion Joy (avg)")
+    plt.ylabel("Emotion Anger (avg)")
+    plt.tight_layout()
+    plt.show()
+
+# ========================================
+# 4. EMOTION DISTRIBUTION (long format)
+# ========================================
+df_melt = df.melt(value_vars=[
+    "emotion_joy", "emotion_sadness", "emotion_anger", 
+    "emotion_surprise", "emotion_disgust", "emotion_fear"
+], var_name="emotion", value_name="score")
+
+plt.figure(figsize=(12, 6))
+sns.boxplot(data=df_melt, x="emotion", y="score", palette="Set3")
+plt.xticks(rotation=45)
+plt.title("Distribution of Emotions")
+plt.tight_layout()
+plt.show()
+
+# ========================================
+# 5. TIME TRENDS (if dates exist)
+# ========================================
+if "date" in df.columns:
+    df_time = df.groupby(df["date"].dt.date)[numeric_cols].mean()
+    plt.figure(figsize=(12, 6))
+    sns.lineplot(data=df_time)
+    plt.title("Daily Trends in Sentiment/Emotion Variables")
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    plt.show()
+    
+    
+#FULL PYTHON CODE — 5 Sophisticated Visualizations (to be done)
+    
+
+import numpy as np
+from pandas.plotting import parallel_coordinates
+from matplotlib.animation import FuncAnimation
+
+# -----------------------------
+df_num = df[numeric_cols].dropna()
+# ======================================================
+# 1. PCA 2-D EMBEDDING (alternative to UMAP)
+# ======================================================
+def pca_reduce(X, n_components=2):
+    X_centered = X - X.mean(axis=0)
+    U, S, Vt = np.linalg.svd(X_centered, full_matrices=False)
+    return np.dot(X_centered, Vt.T[:, :n_components])
+
+pca_coords = pca_reduce(df_num.values, n_components=2)
+
+plt.figure(figsize=(8,6))
+plt.scatter(pca_coords[:,0], pca_coords[:,1], alpha=0.6)
+plt.title("PCA Embedding of Sentiment/Emotion Space")
+plt.xlabel("PC1")
+plt.ylabel("PC2")
+plt.tight_layout()
+plt.show()
+
+
+# ======================================================
+# 2. RADAR PLOTS PER VIDEO (mean emotional profile)
+# ======================================================
+if "video_url" in df.columns:
+    df_vid = df.groupby("video_url")[numeric_cols].mean()
+
+    # Variables for the radar
+    categories = numeric_cols
+    N = len(categories)
+    angles = np.linspace(0, 2 * np.pi, N, endpoint=False).tolist()
+
+    for vid, row in df_vid.iterrows():
+        values = row.values.tolist()
+        values += values[:1]  # close the loop
+        angles_loop = angles + angles[:1]
+
+        plt.figure(figsize=(7, 7))
+        ax = plt.subplot(111, polar=True)
+        ax.plot(angles_loop, values)
+        ax.fill(angles_loop, values, alpha=0.25)
+
+        ax.set_xticks(angles)
+        ax.set_xticklabels(categories, rotation=45)
+        plt.title(f"Radar Chart for Video:\n{vid}")
+        plt.tight_layout()
+        plt.show()
+
+
+# ======================================================
+# 3. PARALLEL COORDINATES PLOT
+# ======================================================
+# Sample if dataset very large
+df_sample = df_num.copy()
+df_sample["label"] = "comments"  # parallel_coordinates requires a class col
+
+plt.figure(figsize=(12,6))
+parallel_coordinates(df_sample, "label", alpha=0.3)
+plt.title("Parallel Coordinates Plot of All Variables")
+plt.xticks(rotation=45)
+plt.tight_layout()
+plt.show()
+
+
+# ======================================================
+# 4. ANIMATED TIME EVOLUTION (line animation)
+# ======================================================
+if "date" in df.columns:
+    df_time = df.groupby(df["date"].dt.date)[numeric_cols].mean()
+    dates = df_time.index
+    data = df_time.values
+
+    fig, ax = plt.subplots(figsize=(10,6))
+
+    def animate(i):
+        ax.clear()
+        ax.plot(dates[:i+1], data[:i+1])
+        ax.set_title("Animated Time Evolution of Sentiment Variables")
+        ax.set_xticklabels(dates[:i+1], rotation=45)
+        ax.set_ylim(data.min(), data.max())
+
+    ani = FuncAnimation(fig, animate, frames=len(dates), interval=200)
+    plt.show()
+
+    # Optionally save:
+   ani.save("sentiment_evolution.gif", writer="pillow")
+
+
+# ======================================================
+# 5. STACKED SENTIMENT TIMELINE
+# ======================================================
+if "date" in df.columns:
+    df_sent_time = df.groupby(df["date"].dt.date)[
+        ["sentiment_pos", "sentiment_neg", "sentiment_neu"]
+    ].mean()
+
+    plt.figure(figsize=(10,6))
+    plt.stackplot(
+        df_sent_time.index,
+        df_sent_time["sentiment_pos"],
+        df_sent_time["sentiment_neg"],
+        df_sent_time["sentiment_neu"],
+        labels=["Positive", "Negative", "Neutral"]
+    )
+    plt.legend(loc="upper left")
+    plt.title("Stacked Sentiment Timeline")
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    plt.show()
+    
+    
+#Single Radar Plot Overlaying All video_url Categories
+   
+import numpy as np
+import matplotlib.cm as cm
+
+
+# Ensure platform & neighborhood exist
+if "platform" not in df.columns or "neighborhood" not in df.columns:
+    raise ValueError("Dataset must contain 'platform' and 'neighborhood' columns")
+
+# -----------------------------
+# Aggregate per video
+# -----------------------------
+df_video = df.groupby(["video_url", "platform/neighborhood"])[numeric_cols].mean().reset_index()
+
+# -----------------------------
+# Radar setup
+# -----------------------------
+categories = numeric_cols
+N = len(categories)
+angles = np.linspace(0, 2*np.pi, N, endpoint=False).tolist()
+angles += angles[:1]
+
+fig = plt.figure(figsize=(14, 10))
+ax = plt.subplot(111, polar=True)
+
+# -----------------------------
+# Precompute color arrays aligned with df_video
+# -----------------------------
+
+# Platform palettes (family per platform)
+platforms = df_video["platform"].unique()
+platform_color_map = {}
+for p in platforms:
+    n = df_video[df_video["platform"] == p].shape[0]
+    # choose color map per platform
+    cmap = cm.Reds if p.lower() == "TikTok" else cm.Blues
+    platform_color_map[p] = cmap(np.linspace(0.3, 1, max(1, n)))  # shape (n,4)
+
+# Neighborhood palettes (family per neighborhood)
+neighborhoods = df_video["neighborhood"].unique()
+neigh_color_map = {}
+for nb in neighborhoods:
+    n = df_video[df_video["neighborhood"] == nb].shape[0]
+    # choose color map per neighborhood
+    if nb == "Los Pajaritos":
+        cmap_nb = cm.Greens
+    elif nb == "Tres Mil Viviendas":
+        cmap_nb = cm.Purples
+    else:
+        cmap_nb = cm.Greys  # fallback
+    neigh_color_map[nb] = cmap_nb(np.linspace(0.3, 1, max(1, n)))
+
+# Build arrays aligned to df_video (same order)
+platform_colors_aligned = np.zeros((len(df_video), 4))
+neigh_colors_aligned = np.zeros((len(df_video), 4))
+
+# We will keep counters per group to pick sequential colors
+platform_counters = {p: 0 for p in platforms}
+neigh_counters = {nb: 0 for nb in neighborhoods}
+
+for i, row in df_video.iterrows():
+    p = row["platform"]
+    nb = row["neighborhood"]
+    p_idx = platform_counters[p]
+    nb_idx = neigh_counters[nb]
+
+    platform_colors_aligned[i, :] = platform_color_map[p][p_idx]
+    neigh_colors_aligned[i, :] = neigh_color_map[nb][nb_idx]
+
+    platform_counters[p] += 1
+    neigh_counters[nb] += 1
+
+# -----------------------------
+# Plot each video with the blended color
+# -----------------------------
+for i, row in df_video.iterrows():
+    plat_col = platform_colors_aligned[i]
+    nb_col = neigh_colors_aligned[i]
+
+    # Blend platform + neighborhood color
+    final_color = plat_col * 0.6 + nb_col * 0.4
+    # Ensure alpha present; final_color is RGBA
+    if final_color.shape[0] == 3:
+        # append opaque alpha if needed (shouldn't happen with cm.* which returns RGBA)
+        final_color = np.append(final_color, 1.0)
+
+    values = row[numeric_cols].values.tolist()
+    values += values[:1]
+
+    ax.plot(angles, values, linewidth=2, alpha=0.55, color=final_color)
+    ax.fill(angles, values, alpha=0.12, color=final_color)
+
+# -----------------------------
+# Style
+# -----------------------------
+ax.set_xticks(angles[:-1])
+ax.set_xticklabels(categories, rotation=45, ha='right')
+plt.title("Radar Plot Colored by Platform (TikTok/YouTube) and Neighborhood", fontsize=16, pad=20)
+
+# Remove any legend (you asked to drop it)
+if ax.get_legend() is not None:
+    ax.get_legend().remove()
+
+plt.tight_layout()
+plt.show()
+
+##NEW APPROACH One gradient per combined category (platform + neighborhood)
+
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.cm as cm
+
+
+
+# Required fields
+assert "platform" in df.columns
+assert "neighborhood" in df.columns
+
+# -----------------------------
+# Group per video
+# -----------------------------
+df_video = df.groupby(["video_url", "platform", "neighborhood"])[numeric_cols].mean().reset_index()
+
+# -----------------------------
+# Create combined category
+# -----------------------------
+df_video["combined_category"] = (
+    df_video["platform"] + " – " + df_video["neighborhood"]
+)
+
+combined_categories = df_video["combined_category"].unique()
+
+# Assign each combined category a colormap
+available_cmaps = [
+    cm.Reds, cm.Blues, cm.Greens, cm.Purples,
+    cm.Oranges, cm.Greys, cm.PiYG, cm.YlOrBr
+]
+
+cmap_map = {}
+for i, cat in enumerate(combined_categories):
+    cmap_map[cat] = available_cmaps[i % len(available_cmaps)]
+
+# -----------------------------
+# Build aligned color ramp per row
+# -----------------------------
+row_colors = np.zeros((len(df_video), 4))
+
+for cat in combined_categories:
+    subset_index = df_video[df_video["combined_category"] == cat].index
+    n = len(subset_index)
+
+    cmap = cmap_map[cat]
+    color_ramp = cmap(np.linspace(0.35, 1, max(1, n)))
+
+    for idx, row_idx in enumerate(subset_index):
+        row_colors[row_idx] = color_ramp[idx]
+
+# -----------------------------
+# Radar setup
+# -----------------------------
+categories = numeric_cols
+N = len(categories)
+
+angles = np.linspace(0, 2*np.pi, N, endpoint=False).tolist()
+angles += angles[:1]
+
+fig = plt.figure(figsize=(14, 10))
+ax = plt.subplot(111, polar=True)
+
+# -----------------------------
+# Plot each row using its assigned color
+# -----------------------------
+for i, row in df_video.iterrows():
+    values = row[numeric_cols].values.tolist()
+    values += values[:1]
+
+    c = row_colors[i]
+
+    ax.plot(angles, values, linewidth=2, alpha=0.50, color=c)
+    ax.fill(angles, values, alpha=0.12, color=c)
+
+# -----------------------------
+# Style
+# -----------------------------
+ax.set_xticks(angles[:-1])
+ax.set_xticklabels(categories, rotation=45, ha='right')
+plt.title(
+    "Radar Plot Colored by Combined Category (platform + neighborhood)",
+    fontsize=16, pad=20
+)
+
+# Remove legend completely
+if ax.get_legend() is not None:
+    ax.get_legend().remove()
+
+plt.tight_layout()
+plt.show()
+
+
+#✅ UPDATED FULL CODE WITH OUTWARD LABELS + LEGEND BELOW
+
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.cm as cm
+
+# -----------------------------
+# Load dataset
+# -----------------------------
+
+
+assert "platform" in df.columns
+assert "neighborhood" in df.columns
+
+# -----------------------------
+# Group per video
+# -----------------------------
+df_video = df.groupby(["video_url", "platform", "neighborhood"])[numeric_cols].mean().reset_index()
+
+# -----------------------------
+# Combined category
+# -----------------------------
+df_video["combined_category"] = (
+    df_video["platform"] + " – " + df_video["neighborhood"]
+)
+
+combined_categories = df_video["combined_category"].unique()
+
+# -----------------------------
+# Assign one colormap per combined category
+# -----------------------------
+available_cmaps = [
+    cm.Reds, cm.Blues, cm.Greens, cm.Purples,
+    cm.Oranges, cm.Greys, cm.PiYG, cm.YlOrBr
+]
+
+cmap_map = {cat: available_cmaps[i % len(available_cmaps)]
+            for i, cat in enumerate(combined_categories)}
+
+# -----------------------------
+# Build row-aligned color array
+# -----------------------------
+row_colors = np.zeros((len(df_video), 4))
+
+for cat in combined_categories:
+    idxs = df_video[df_video["combined_category"] == cat].index
+    n = len(idxs)
+    cmap = cmap_map[cat]
+    shades = cmap(np.linspace(0.35, 1, max(1, n)))
+    for j, row_idx in enumerate(idxs):
+        row_colors[row_idx] = shades[j]
+
+# -----------------------------
+# Radar setup
+# -----------------------------
+categories = numeric_cols
+N = len(categories)
+angles = np.linspace(0, 2*np.pi, N, endpoint=False).tolist()
+angles += angles[:1]
+
+fig = plt.figure(figsize=(14, 12))
+ax = plt.subplot(111, polar=True)
+
+# -----------------------------
+# Plot all videos
+# -----------------------------
+for i, row in df_video.iterrows():
+    values = row[numeric_cols].values.tolist()
+    values += values[:1]
+
+    color = row_colors[i]
+
+    ax.plot(angles, values, linewidth=2, alpha=0.6, color=color,
+            label=row["combined_category"] if i == list(df_video["combined_category"]).index(row["combined_category"]) else "")
+    ax.fill(angles, values, alpha=0.12, color=color)
+
+# -----------------------------
+# Axis labels on the "other side" / outside
+# -----------------------------
+ax.set_xticks(angles[:-1])
+ax.set_xticklabels(categories, fontsize=10, rotation=45, ha='right')
+
+# Radial labels outward
+ax.set_rlabel_position(180)  # move numeric labels to the opposite side
+ax.tick_params(axis='y', labelsize=10)
+plt.gca().set_ylim(bottom=0)  # ensures full radius visible
+
+# Increase spacing so labels don’t overlap plot
+ax.yaxis.set_label_coords(-0.25, 0.5)
+
+# -----------------------------
+# Legend BELOW the radar plot
+# -----------------------------
+handles, labels = ax.get_legend_handles_labels()
+unique_handles_labels = dict(zip(labels, handles))  # remove duplicates
+
+plt.legend(
+    unique_handles_labels.values(),
+    unique_handles_labels.keys(),
+    loc="upper center",
+    bbox_to_anchor=(0.5, -0.15),
+    ncol=2,
+    frameon=False
+)
+
+plt.title("Radar Plot Colored by Combined Category\n(Platform + Neighborhood)", fontsize=16, pad=25)
+plt.tight_layout()
+plt.show()
+
+
+### FULL WORKING CODE — 4 RADARS WITH VIDEO-LEVEL GRADIENT COLORS
+
+
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.cm as cm
+from sklearn.preprocessing import MinMaxScaler
+
+
+# -------------------------------------------------
+# Compute per-video simple mean (NO WEIGHTS)
+# -------------------------------------------------
+df_video = df.groupby(["video_url", "platform", "neighborhood"])[numeric_cols].mean().reset_index()
+
+# Create combined category label
+df_video["combined_category"] = df_video["platform"] + " – " + df_video["neighborhood"]
+
+# -------------------------------------------------
+# Normalize all numeric values to [0–1]
+# -------------------------------------------------
+scaler = MinMaxScaler()
+df_video[numeric_cols] = scaler.fit_transform(df_video[numeric_cols])
+
+# -------------------------------------------------
+# Target categories (four combinations)
+# -------------------------------------------------
+target_categories = [
+    "TikTok – Los Pajaritos",
+    "TikTok – Tres Mil Viviendas",
+    "YouTube – Los Pajaritos",
+    "YouTube – Tres Mil Viviendas"
+]
+
+# -------------------------------------------------
+# Color system
+# -------------------------------------------------
+platform_colors = {
+    "TikTok": cm.Blues,
+    "YouTube": cm.Reds
+}
+
+neigh_intensity = {
+    "Los Pajaritos": 0.35,
+    "Tres Mil Viviendas": 0.75
+}
+
+# -------------------------------------------------
+# Radar geometry
+# -------------------------------------------------
+N = len(numeric_cols)
+angles = np.linspace(0, 2*np.pi, N, endpoint=False).tolist()
+angles += angles[:1]
+
+# -------------------------------------------------
+# 2x2 subplot figure
+# -------------------------------------------------
+fig, axes = plt.subplots(2, 2, figsize=(22, 20), subplot_kw=dict(polar=True))
+axes = axes.flatten()
+
+# -------------------------------------------------
+# Plot each radar
+# -------------------------------------------------
+for idx, cat_name in enumerate(target_categories):
+
+    ax = axes[idx]
+    df_cat = df_video[df_video["combined_category"] == cat_name]
+
+    if df_cat.empty:
+        ax.text(0.5, 0.5, f"No data for {cat_name}", ha='center')
+        continue
+
+    # Extract platform + neighborhood
+    platform = df_cat["platform"].iloc[0]
+    neigh = df_cat["neighborhood"].iloc[0]
+    cmap = platform_colors[platform]
+    intensity = neigh_intensity[neigh]
+
+    # Color gradient for videos in this panel
+    n_videos = len(df_cat)
+    color_gradient = cmap(np.linspace(intensity, 1.0, n_videos))
+
+    # -------------------------
+    # Plot each video radar line
+    # -------------------------
+    for i, (_, row) in enumerate(df_cat.iterrows()):
+
+        values = row[numeric_cols].values.tolist()
+        values += values[:1]
+
+        color = color_gradient[i]
+
+        ax.plot(
+            angles, values, linewidth=2, color=color, alpha=0.85,
+            label=row["video_url"]
+        )
+        ax.fill(angles, values, color=color, alpha=0.12)
+
+    # -------------------------
+    # Radar labeling
+    # -------------------------
+    ax.set_xticks(angles[:-1])
+    ax.set_xticklabels(numeric_cols, fontsize=15,  rotation=45, ha='right')
+
+    ax.set_rlabel_position(180)
+    ax.tick_params(axis='y', labelsize=8)
+    ax.set_ylim(0, 1)
+    ax.yaxis.set_label_coords(-0.25, 0.5)
+
+plt.subplots_adjust(
+    wspace=3,   # horizontal space between subplots
+    hspace=3    # vertical space between subplots
+)
+
+plt.tight_layout()
+plt.show()
+
+
+#📌 FULL PYTHON CODE FOR A 3D RADAR PLOT
+
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.cm as cm
+from mpl_toolkits.mplot3d import Axes3D
+
+
+
+# Keep only columns that exist in your data
+numeric_cols = [c for c in numeric_cols if c in df.columns]
+
+# Aggregate per video
+df_video = df.groupby(["video_url", "platform", "neighborhood"])[numeric_cols].mean().reset_index()
+
+# Create combined category
+df_video["combined_category"] = df_video["platform"] + " – " + df_video["neighborhood"]
+combined_categories = df_video["combined_category"].unique()
+
+# --------------------------------------------
+# Assign colors for each combined category
+# --------------------------------------------
+available_cmaps = [
+    cm.Reds, cm.Blues, cm.Greens, cm.Purples,
+    cm.Oranges, cm.Greys, cm.PuBuGn, cm.YlOrBr
+]
+
+color_map = {
+    cat: available_cmaps[i % len(available_cmaps)](0.7)
+    for i, cat in enumerate(combined_categories)
+}
+
+# --------------------------------------------
+# Radar geometry
+# --------------------------------------------
+N = len(numeric_cols)
+angles = np.linspace(0, 2 * np.pi, N, endpoint=False)
+# close loop
+angles = np.concatenate([angles, [angles[0]]])
+
+# --------------------------------------------
+# 3D plot setup
+# --------------------------------------------
+fig = plt.figure(figsize=(16, 12))
+ax = fig.add_subplot(111, projection='3d')
+
+z_spacing = 1.5  # vertical distance between layers
+
+# --------------------------------------------
+# Plot each combined category on its own Z level
+# --------------------------------------------
+for level, cat in enumerate(combined_categories):
+
+    row = df_video[df_video["combined_category"] == cat][numeric_cols].mean()
+
+    # Values
+    values = row.values.tolist()
+    values.append(values[0])  # close loop
+
+    # Convert to arrays
+    values = np.array(values)
+
+    # Make sure values and angles match
+    A = angles[:len(values)]
+
+    # Polar → Cartesian in 3D
+    xs = values * np.cos(A)
+    ys = values * np.sin(A)
+    zs = np.ones_like(xs) * level * z_spacing
+
+    color = color_map[cat]
+
+    # Outline
+    ax.plot(xs, ys, zs, color=color, linewidth=2)
+
+    # Fill polygon surface
+    ax.plot_trisurf(xs, ys, zs, color=color, alpha=0.25, shade=True)
+
+    # Label for this level
+    ax.text(0, 0, level * z_spacing + 0.2, cat,
+            ha='center', va='bottom', fontsize=12, weight='bold')
+
+# --------------------------------------------
+# Clean up axes
+# --------------------------------------------
+ax.set_xticks([])
+ax.set_yticks([])
+ax.set_zticks([])
+ax.set_xlabel("")
+ax.set_ylabel("")
+ax.set_zlabel("Category Level")
+
+ax.set_title("3D Radar Plot by Platform and Neighborhood", fontsize=18, pad=20)
+
+# Helpful aspect ratio
+ax.set_box_aspect((1, 1, 0.7))
+
+plt.tight_layout()
+plt.show()
+
+
+
+
+
+
+
+
